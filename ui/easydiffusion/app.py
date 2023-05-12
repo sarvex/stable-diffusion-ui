@@ -113,11 +113,12 @@ def setConfig(config):
         config_bat.append(f"@set SD_UI_BIND_IP={bind_ip}")
 
         # Preserve these variables if they are set
-        for var in PRESERVE_CONFIG_VARS:
-            if os.getenv(var) is not None:
-                config_bat.append(f"@set {var}={os.getenv(var)}")
-
-        if len(config_bat) > 0:
+        config_bat.extend(
+            f"@set {var}={os.getenv(var)}"
+            for var in PRESERVE_CONFIG_VARS
+            if os.getenv(var) is not None
+        )
+        if config_bat:
             with open(config_bat_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(config_bat))
     except:
@@ -135,10 +136,11 @@ def setConfig(config):
         config_sh.append(f"export SD_UI_BIND_IP={bind_ip}")
 
         # Preserve these variables if they are set
-        for var in PRESERVE_CONFIG_VARS:
-            if os.getenv(var) is not None:
-                config_bat.append(f'export {var}="{shlex.quote(os.getenv(var))}"')
-
+        config_bat.extend(
+            f'export {var}="{shlex.quote(os.getenv(var))}"'
+            for var in PRESERVE_CONFIG_VARS
+            if os.getenv(var) is not None
+        )
         if len(config_sh) > 1:
             with open(config_sh_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(config_sh))
@@ -178,10 +180,11 @@ def getUIPlugins():
     plugins = []
 
     for plugins_dir, dir_prefix in UI_PLUGINS_SOURCES:
-        for file in os.listdir(plugins_dir):
-            if file.endswith(".plugin.js"):
-                plugins.append(f"/plugins/{dir_prefix}/{file}")
-
+        plugins.extend(
+            f"/plugins/{dir_prefix}/{file}"
+            for file in os.listdir(plugins_dir)
+            if file.endswith(".plugin.js")
+        )
     return plugins
 
 
@@ -216,7 +219,7 @@ def load_server_plugins():
             log.info(f"Applying server plugin: {file}")
             apply_plugin(file, mod)
         except:
-            log.warn(f"Error while loading a server plugin")
+            log.warn("Error while loading a server plugin")
             log.warn(traceback.format_exc())
 
 
@@ -268,7 +271,7 @@ def get_image_modifiers():
         for entry in os.scandir(directory_path):
             if entry.is_file():
                 file_extension = list(filter(lambda e: entry.name.endswith(e), IMAGE_EXTENSIONS))
-                if len(file_extension) == 0:
+                if not file_extension:
                     continue
 
                 modifier_name = entry.name[: -len(file_extension[0])]
@@ -281,16 +284,16 @@ def get_image_modifiers():
                 portrait_extension = list(filter(lambda e: modifier_name.lower().endswith(e), CUSTOM_MODIFIERS_PORTRAIT_EXTENSIONS))
                 landscape_extension = list(filter(lambda e: modifier_name.lower().endswith(e), CUSTOM_MODIFIERS_LANDSCAPE_EXTENSIONS))
 
-                if len(portrait_extension) > 0:
+                if portrait_extension:
                     is_landscape = False
                     modifier_name = modifier_name[: -len(portrait_extension[0])]
                 elif len(landscape_extension) > 0:
                     is_portrait = False
                     modifier_name = modifier_name[: -len(landscape_extension[0])]
-                
+
                 if (category_name not in modifier_categories):
                     modifier_categories[category_name] = {}
-                
+
                 category = modifier_categories[category_name]
 
                 if (modifier_name not in category):
@@ -298,7 +301,7 @@ def get_image_modifiers():
 
                 if (is_portrait or "portrait" not in category[modifier_name]):
                     category[modifier_name]["portrait"] = modifier_path
-                
+
                 if (is_landscape or "landscape" not in category[modifier_name]):
                     category[modifier_name]["landscape"] = modifier_path
             elif entry.is_dir():
@@ -310,7 +313,11 @@ def get_image_modifiers():
     scan_directory(CUSTOM_MODIFIERS_DIR)
 
     custom_categories = sorted(
-        [cn for cn in modifier_categories.keys() if cn not in original_category_order],
+        [
+            cn
+            for cn in modifier_categories
+            if cn not in original_category_order
+        ],
         key=str.casefold,
     )
 

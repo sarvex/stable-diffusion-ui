@@ -140,7 +140,7 @@ def filter_images(task_data: TaskData, images: list, user_stopped):
     if task_data.use_upscale and "realesrgan" in task_data.use_upscale.lower():
         filters_to_apply.append("realesrgan")
 
-    if len(filters_to_apply) == 0:
+    if not filters_to_apply:
         return images
 
     return apply_filters(context, filters_to_apply, images, scale=task_data.upscale_amount)

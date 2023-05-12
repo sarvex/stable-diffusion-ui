@@ -88,14 +88,16 @@ def format_file_name(
     folder_img_number: ImageNumber,
 ):
     format = format_placeholders(format, req, task_data, now)
-    
+
     if "$n" in format:
         format = format.replace("$n", f"{folder_img_number():05}")
-    
+
     if "$tsb64" in format:
-        img_id = base_repr(int(now * 10000), 36)[-7:] + base_repr(int(batch_file_number), 36) # Base 36 conversion, 0-9, A-Z
+        img_id = base_repr(int(now * 10000), 36)[-7:] + base_repr(
+            batch_file_number, 36
+        )
         format = format.replace("$tsb64", img_id)
-    
+
     if "$ts" in format:
         format = format.replace("$ts", str(int(now * 1000) + batch_file_number))
 
@@ -237,23 +239,25 @@ def _calculate_img_number(save_dir_path: str, task_data: TaskData):
     def get_highest_img_number(accumulator: int, file: os.DirEntry) -> int:
         if not file.is_file:
             return accumulator
-        
-        if len(list(filter(lambda e: file.name.endswith(e), app.IMAGE_EXTENSIONS))) == 0:
+
+        if not list(
+            filter(lambda e: file.name.endswith(e), app.IMAGE_EXTENSIONS)
+        ):
             return accumulator
-        
+
         get_highest_img_number.number_of_images = get_highest_img_number.number_of_images + 1
-        
+
         number_match = img_number_regex.match(file.name)
         if not number_match:
             return accumulator
-        
+
         file_number = number_match.group().lstrip('0')
-        
+
         # Handle 00000
         return int(file_number) if file_number else 0
-    
+
     get_highest_img_number.number_of_images = 0
-    
+
     highest_file_number = -1
 
     if os.path.isdir(save_dir_path):
@@ -267,9 +271,9 @@ def _calculate_img_number(save_dir_path: str, task_data: TaskData):
             _calculate_img_number.session_img_numbers[task_data.session_id],
             calculated_img_number,
         )
-    
+
     calculated_img_number = calculated_img_number + 1
-    
+
     _calculate_img_number.session_img_numbers[task_data.session_id] = calculated_img_number
     return calculated_img_number
 

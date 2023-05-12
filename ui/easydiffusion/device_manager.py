@@ -31,21 +31,20 @@ def get_device_delta(render_devices, active_devices):
     elif render_devices is not None:
         if isinstance(render_devices, str):
             render_devices = [render_devices]
-        if isinstance(render_devices, list) and len(render_devices) > 0:
-            render_devices = list(filter(lambda x: x.startswith("cuda:") or x == "mps", render_devices))
-            if len(render_devices) == 0:
-                raise Exception(
-                    'Invalid render_devices value in config.json. Valid: {"render_devices": ["cuda:0", "cuda:1"...]}, or {"render_devices": "cpu"} or {"render_devices": "mps"} or {"render_devices": "auto"}'
-                )
-
-            render_devices = list(filter(lambda x: is_device_compatible(x), render_devices))
-            if len(render_devices) == 0:
-                raise Exception(
-                    "Sorry, none of the render_devices configured in config.json are compatible with Stable Diffusion"
-                )
-        else:
+        if not isinstance(render_devices, list) or len(render_devices) <= 0:
             raise Exception(
                 'Invalid render_devices value in config.json. Valid: {"render_devices": ["cuda:0", "cuda:1"...]}, or {"render_devices": "cpu"} or {"render_devices": "auto"}'
+            )
+        render_devices = list(filter(lambda x: x.startswith("cuda:") or x == "mps", render_devices))
+        if not render_devices:
+            raise Exception(
+                'Invalid render_devices value in config.json. Valid: {"render_devices": ["cuda:0", "cuda:1"...]}, or {"render_devices": "cpu"} or {"render_devices": "mps"} or {"render_devices": "auto"}'
+            )
+
+        render_devices = list(filter(lambda x: is_device_compatible(x), render_devices))
+        if not render_devices:
+            raise Exception(
+                "Sorry, none of the render_devices configured in config.json are compatible with Stable Diffusion"
             )
     else:
         render_devices = ["auto"]
@@ -191,11 +190,9 @@ def validate_device_id(device, log_prefix=""):
     def is_valid():
         if not isinstance(device, str):
             return False
-        if device == "cpu" or device == "mps":
+        if device in ["cpu", "mps"]:
             return True
-        if not device.startswith("cuda:") or not device[5:].isnumeric():
-            return False
-        return True
+        return bool(device.startswith("cuda:") and device[5:].isnumeric())
 
     if not is_valid():
         raise EnvironmentError(
@@ -222,7 +219,7 @@ def is_device_compatible(device):
         _, mem_total = torch.cuda.mem_get_info(device)
         mem_total /= float(10**9)
         if mem_total < 3.0:
-            if is_device_compatible.history.get(device) == None:
+            if is_device_compatible.history.get(device) is None:
                 log.warn(f"GPU {device} with less than 3 GB of VRAM is not compatible with Stable Diffusion")
                 is_device_compatible.history[device] = 1
             return False

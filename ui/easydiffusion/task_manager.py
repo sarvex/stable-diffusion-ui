@@ -87,19 +87,17 @@ class RenderTask:  # Task with output queue and completion lock.
             return "error"
         if not self.buffer_queue.empty():
             return "buffer"
-        if self.response:
-            return "completed"
-        return "pending"
+        return "completed" if self.response else "pending"
 
     @property
     def is_pending(self):
-        return bool(not self.response and not self.error)
+        return not self.response and not self.error
 
 
 # Temporary cache to allow to query tasks results for a short time after they are completed.
 class DataCache:
     def __init__(self):
-        self._base = dict()
+        self._base = {}
         self._lock: threading.Lock = threading.Lock()
 
     def _get_ttl_time(self, ttl: int) -> int:
@@ -110,7 +108,7 @@ class DataCache:
 
     def clean(self) -> None:
         if not self._lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-            raise Exception("DataCache.clean" + ERR_LOCK_FAILED)
+            raise Exception(f"DataCache.clean{ERR_LOCK_FAILED}")
         try:
             # Create a list of expired keys to delete
             to_delete = []
@@ -133,7 +131,7 @@ class DataCache:
 
     def clear(self) -> None:
         if not self._lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-            raise Exception("DataCache.clear" + ERR_LOCK_FAILED)
+            raise Exception(f"DataCache.clear{ERR_LOCK_FAILED}")
         try:
             self._base.clear()
         finally:
@@ -141,7 +139,7 @@ class DataCache:
 
     def delete(self, key: Hashable) -> bool:
         if not self._lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-            raise Exception("DataCache.delete" + ERR_LOCK_FAILED)
+            raise Exception(f"DataCache.delete{ERR_LOCK_FAILED}")
         try:
             if key not in self._base:
                 return False
@@ -152,7 +150,7 @@ class DataCache:
 
     def keep(self, key: Hashable, ttl: int) -> bool:
         if not self._lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-            raise Exception("DataCache.keep" + ERR_LOCK_FAILED)
+            raise Exception(f"DataCache.keep{ERR_LOCK_FAILED}")
         try:
             if key in self._base:
                 _, value = self._base.get(key)
@@ -164,7 +162,7 @@ class DataCache:
 
     def put(self, key: Hashable, value: Any, ttl: int) -> bool:
         if not self._lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-            raise Exception("DataCache.put" + ERR_LOCK_FAILED)
+            raise Exception(f"DataCache.put{ERR_LOCK_FAILED}")
         try:
             self._base[key] = (self._get_ttl_time(ttl), value)
         except Exception as e:
@@ -177,7 +175,7 @@ class DataCache:
 
     def tryGet(self, key: Hashable) -> Any:
         if not self._lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-            raise Exception("DataCache.tryGet" + ERR_LOCK_FAILED)
+            raise Exception(f"DataCache.tryGet{ERR_LOCK_FAILED}")
         try:
             ttl, value = self._base.get(key, (None, None))
             if ttl is not None and self._is_expired(ttl):
@@ -213,8 +211,7 @@ class SessionState:
     def tasks(self):
         tasks = []
         for task_id in self._tasks_ids:
-            task = task_cache.tryGet(task_id)
-            if task:
+            if task := task_cache.tryGet(task_id):
                 tasks.append(task)
         return tasks
 
@@ -241,14 +238,14 @@ def thread_get_next_task():
     try:  # Select a render task.
         for queued_task in tasks_queue:
             if queued_task.render_device and renderer.context.device != queued_task.render_device:
-                # Is asking for a specific render device.
                 if is_alive(queued_task.render_device) > 0:
                     continue  # requested device alive, skip current one.
-                else:
                     # Requested device is not active, return error to UI.
-                    queued_task.error = Exception(queued_task.render_device + " is not currently active.")
-                    task = queued_task
-                    break
+                queued_task.error = Exception(
+                    f"{queued_task.render_device} is not currently active."
+                )
+                task = queued_task
+                break
             if not queued_task.render_device and renderer.context.device == "cpu" and is_alive() > 1:
                 # not asking for any specific devices, cpu want to grab task but other render devices are alive.
                 continue  # Skip Tasks, don't run on CPU unless there is nothing else or user asked for it.
@@ -317,11 +314,9 @@ def thread_render(device):
             def step_callback():
                 global current_state_error
 
-                if (
-                    isinstance(current_state_error, SystemExit)
-                    or isinstance(current_state_error, StopAsyncIteration)
-                    or isinstance(task.error, StopAsyncIteration)
-                ):
+                if isinstance(
+                    current_state_error, (SystemExit, StopAsyncIteration)
+                ) or isinstance(task.error, StopAsyncIteration):
                     renderer.context.stop_processing = True
                     if isinstance(current_state_error, StopAsyncIteration):
                         task.error = current_state_error
@@ -341,7 +336,7 @@ def thread_render(device):
             session_cache.keep(task.task_data.session_id, TASK_TTL)
         except Exception as e:
             task.error = str(e)
-            task.response = {"status": "failed", "detail": str(task.error)}
+            task.response = {"status": "failed", "detail": task.error}
             task.buffer_queue.put(json.dumps(task.response))
             log.error(traceback.format_exc())
         finally:
@@ -415,13 +410,17 @@ def get_devices():
 
     # list the activated devices
     if not manager_lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-        raise Exception("get_devices" + ERR_LOCK_FAILED)
+        raise Exception(f"get_devices{ERR_LOCK_FAILED}")
     try:
         for rthread in render_threads:
             if not rthread.is_alive():
                 continue
             weak_data = weak_thread_data.get(rthread)
-            if not weak_data or not "device" in weak_data or not "device_name" in weak_data:
+            if (
+                not weak_data
+                or "device" not in weak_data
+                or "device_name" not in weak_data
+            ):
                 continue
             device = weak_data["device"]
             devices["active"].update({device: get_device_info(device)})
@@ -433,13 +432,17 @@ def get_devices():
 
 def is_alive(device=None):
     if not manager_lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-        raise Exception("is_alive" + ERR_LOCK_FAILED)
+        raise Exception(f"is_alive{ERR_LOCK_FAILED}")
     nbr_alive = 0
     try:
         for rthread in render_threads:
             if device is not None:
                 weak_data = weak_thread_data.get(rthread)
-                if weak_data is None or not "device" in weak_data or weak_data["device"] is None:
+                if (
+                    weak_data is None
+                    or "device" not in weak_data
+                    or weak_data["device"] is None
+                ):
                     continue
                 thread_device = weak_data["device"]
                 if thread_device != device:
@@ -453,7 +456,7 @@ def is_alive(device=None):
 
 def start_render_thread(device):
     if not manager_lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-        raise Exception("start_render_thread" + ERR_LOCK_FAILED)
+        raise Exception(f"start_render_thread{ERR_LOCK_FAILED}")
     log.info(f"Start new Rendering Thread on device: {device}")
     try:
         rthread = threading.Thread(target=thread_render, kwargs={"device": device})
@@ -464,7 +467,11 @@ def start_render_thread(device):
     finally:
         manager_lock.release()
     timeout = DEVICE_START_TIMEOUT
-    while not rthread.is_alive() or not rthread in weak_thread_data or not "device" in weak_thread_data[rthread]:
+    while (
+        not rthread.is_alive()
+        or rthread not in weak_thread_data
+        or "device" not in weak_thread_data[rthread]
+    ):
         if rthread in weak_thread_data and "error" in weak_thread_data[rthread]:
             log.error(f"{rthread}, {device}, error: {weak_thread_data[rthread]['error']}")
             return False
@@ -483,14 +490,18 @@ def stop_render_thread(device):
         return False
 
     if not manager_lock.acquire(blocking=True, timeout=LOCK_TIMEOUT):
-        raise Exception("stop_render_thread" + ERR_LOCK_FAILED)
+        raise Exception(f"stop_render_thread{ERR_LOCK_FAILED}")
     log.info(f"Stopping Rendering Thread on device: {device}")
 
     try:
         thread_to_remove = None
         for rthread in render_threads:
             weak_data = weak_thread_data.get(rthread)
-            if weak_data is None or not "device" in weak_data or weak_data["device"] is None:
+            if (
+                weak_data is None
+                or "device" not in weak_data
+                or weak_data["device"] is None
+            ):
                 continue
             thread_device = weak_data["device"]
             if thread_device == device:
@@ -552,14 +563,13 @@ def render(render_req: GenerateImageRequest, task_data: TaskData):
         )
 
     new_task = RenderTask(render_req, task_data)
-    if session.put(new_task, TASK_TTL):
-        # Use twice the normal timeout for adding user requests.
-        # Tries to force session.put to fail before tasks_queue.put would.
-        if manager_lock.acquire(blocking=True, timeout=LOCK_TIMEOUT * 2):
-            try:
-                tasks_queue.append(new_task)
-                idle_event.set()
-                return new_task
-            finally:
-                manager_lock.release()
+    if session.put(new_task, TASK_TTL) and manager_lock.acquire(
+        blocking=True, timeout=LOCK_TIMEOUT * 2
+    ):
+        try:
+            tasks_queue.append(new_task)
+            idle_event.set()
+            return new_task
+        finally:
+            manager_lock.release()
     raise RuntimeError("Failed to add task to cache.")

@@ -236,7 +236,7 @@ def render_internal(req: dict):
         }
         return JSONResponse(response, headers=NOCACHE_HEADERS)
     except ChildProcessError as e:  # Render thread is dead
-        raise HTTPException(status_code=500, detail=f"Rendering thread has died.")  # HTTP500 Internal Server Error
+        raise HTTPException(status_code=500, detail="Rendering thread has died.")
     except ConnectionRefusedError as e:  # Unstarted task pending limit reached, deny queueing too many.
         raise HTTPException(status_code=503, detail=str(e))  # HTTP503 Service Unavailable
     except Exception as e:
@@ -281,10 +281,10 @@ def stream_internal(task_id: int):
 
 def stop_internal(task: int):
     if not task:
-        if (
-            task_manager.current_state == task_manager.ServerStates.Online
-            or task_manager.current_state == task_manager.ServerStates.Unavailable
-        ):
+        if task_manager.current_state in [
+            task_manager.ServerStates.Online,
+            task_manager.ServerStates.Unavailable,
+        ]:
             raise HTTPException(status_code=409, detail="Not currently running any tasks.")  # HTTP409 Conflict
         task_manager.current_state_error = StopAsyncIteration("")
         return {"OK"}

@@ -45,7 +45,7 @@ def load_default_models(context: Context):
         except Exception as e:
             log.error(f"[red]Error while loading {model_type} model: {context.model_paths[model_type]}[/red]")
             log.error(f"[red]Error: {e}[/red]")
-            log.error(f"[red]Consider removing the model from the model folder.[red]")
+            log.error("[red]Consider removing the model from the model folder.[red]")
 
 
 def unload_all(context: Context):
@@ -59,10 +59,8 @@ def resolve_model_to_use(model_name: str = None, model_type: str = None):
     config = app.getConfig()
 
     model_dirs = [os.path.join(app.MODELS_DIR, model_type), app.SD_DIR]
-    if not model_name:  # When None try user configured model.
-        # config = getConfig()
-        if "model" in config and model_type in config["model"]:
-            model_name = config["model"][model_type]
+    if not model_name and "model" in config and model_type in config["model"]:
+        model_name = config["model"][model_type]
 
     if model_name:
         # Check models directory
@@ -211,7 +209,7 @@ def getModels():
         ):
             if entry.is_file():
                 matching_suffix = list(filter(lambda s: entry.name.endswith(s), suffixes))
-                if len(matching_suffix) == 0:
+                if not matching_suffix:
                     continue
                 matching_suffix = matching_suffix[0]
 
